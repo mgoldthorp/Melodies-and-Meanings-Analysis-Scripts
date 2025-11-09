@@ -16,6 +16,7 @@ source("R/simulate_null_cor.R")
 
 
 ## Response data ----
+#Data/Metadata_MM_2025-X-X
 load("data/responses_formatted_1032023.Rdata")
 
 ## Response mappings
@@ -23,7 +24,7 @@ response_map <- read_xlsx("response_map_for revisions.xlsx", sheet = "response_m
 
 
 ## List of movers and stayers ----
-load("data/movers_and_stayers.Rdata") 
+#load("data/movers_and_stayers.Rdata") 
 
 ### Functions ##########################################################3
 ## Select lower triangle of correlation matrix ----
@@ -61,14 +62,14 @@ stats_func <- function(x,y){
 
 ## Structure response dataset and remove multi-word responses ----
 response_cues <- full_df %>%
-    select(subject_id, cue, response, COND_ID, response_order) %>%
-    mutate(subject_id = as.factor(subject_id), 
+    select(participant, cue, response, condition, response_order) %>%
+    mutate(participant = as.factor(participant), 
            cue = as.factor(cue), 
-           condition = factor(COND_ID, 
+           condition = factor(condition, 
                               levels = 1:3, 
-                              labels = c("adult", "child", "short"))) %>%
+                              labels = c("child", "classical", "noise"))) %>%
     #slice(which(!str_count(.$response, "\\w+") >1)) %>%
-    left_join(., movers_and_stayers, by = c("cue" = "word")) %>%
+    #left_join(., movers_and_stayers, by = c("cue" = "word")) %>%
     left_join(., unique(select(response_map, response = RESPONSE, revision)) %>% filter(!is.na(revision))) %>%
     mutate(responses_revised = ifelse(is.na(revision), response, revision)) %>%
     select(-response,-revision)
@@ -76,35 +77,35 @@ response_cues <- full_df %>%
 
 
 ## Create different dataframes for movers and stayers ----
-response_cues_movers <- response_cues %>% filter(type == "mover1")
-response_cues_stayers <- response_cues %>% filter(type == "stayer1")
+#response_cues_movers <- response_cues %>% filter(type == "mover1")
+#response_cues_stayers <- response_cues %>% filter(type == "stayer1")
 
 ## Split by condition and compute correlation matrix ----
-response_split_stayers <- split(response_cues_stayers, response_cues_stayers$condition)
-response_split_movers <- split(response_cues_movers, response_cues_movers$condition)
+#response_split_stayers <- split(response_cues_stayers, response_cues_stayers$condition)
+response_split <- split(response_cues, response_cues$condition)
 
 
-response_split_mats_cor_stayers <- map(response_split_stayers, function(x){
+response_split_mats_cor <- map(response_split, function(x){
    generate_correlation_matrix(x)
 })
 
-conditions_contr <- list(ca = c("child", "adult"), cs = c("child", "short"), as = c("adult", "short"))
+conditions_contr <- list(ccl = c("child", "classical"), cn = c("child", "noise"), cln = c("classical", "noise"))
 
 
-## Correlate cue-wise correlations stayers ----
-cor_ca_stayer <- cor(response_split_mats_cor_stayers$child, response_split_mats_cor_stayers$adult, method = 'spearman')
-cor_cs_stayer <- cor(response_split_mats_cor_stayers$child, response_split_mats_cor_stayers$short, method = 'spearman')
-cor_as_stayer <- cor(response_split_mats_cor_stayers$short, response_split_mats_cor_stayers$adult, method = 'spearman')
+## Correlate cue-wise correlations ----
+cor_ccl <- cor(response_split_mats_cor$child, response_split_mats_cor$classical, method = 'spearman')
+cor_cn <- cor(response_split_mats_cor$child, response_split_mats_cor$noise, method = 'spearman')
+cor_cln <- cor(response_split_mats_cor$classical, response_split_mats_cor$noise, method = 'spearman')
 
 
-response_split_mats_cor_movers <- map(response_split_movers, function(x){
-   generate_correlation_matrix(x)
-})
+#response_split_mats_cor_movers <- map(response_split_movers, function(x){
+ #  generate_correlation_matrix(x)
+#})
 
 ## Correlate cue-wise correlations movers ----
-cor_ca_mover <- cor(response_split_mats_cor_movers$child, response_split_mats_cor_movers$adult, method = 'spearman')
-cor_cs_mover <- cor(response_split_mats_cor_movers$child, response_split_mats_cor_movers$short, method = 'spearman')
-cor_as_mover <- cor(response_split_mats_cor_movers$short, response_split_mats_cor_movers$adult, method = 'spearman')
+#cor_ca_mover <- cor(response_split_mats_cor_movers$child, response_split_mats_cor_movers$adult, method = 'spearman')
+#cor_cs_mover <- cor(response_split_mats_cor_movers$child, response_split_mats_cor_movers$short, method = 'spearman')
+#cor_as_mover <- cor(response_split_mats_cor_movers$short, response_split_mats_cor_movers$adult, method = 'spearman')
 
 
 
@@ -112,21 +113,15 @@ cor_as_mover <- cor(response_split_mats_cor_movers$short, response_split_mats_co
 # If Windows --> multisession
 # If Linux --> multicore
 # If you want serial (non-parallel processing) --> sequential
-plan("multicore")
+plan("multisession")
 
 
-null_list <- list(mover_ca = list(adult = response_cues_movers %>% filter(condition == "adult"),
-                                  child = response_cues_movers %>% filter(condition == "child")), 
-                  stayer_ca = list(adult = response_cues_stayers %>% filter(condition == "adult"),
-                                   child = response_cues_stayers %>% filter(condition == "child")),
-                  mover_cs = list(child = response_cues_movers %>% filter(condition == "child"),
-                                  short = response_cues_movers %>% filter(condition == "short")),
-                  stayer_cs = list(child = response_cues_stayers %>% filter(condition == "child"),
-                                   short = response_cues_stayers %>% filter(condition == "short")),
-                  mover_as = list(adult = response_cues_movers %>% filter(condition == "adult"),
-                                  short = response_cues_movers %>% filter(condition == "short")), 
-                  stayer_as = list(adult = response_cues_stayers %>% filter(condition == "adult"),
-                                  short = response_cues_stayers %>% filter(condition == "short"))
+null_list <- list(ccl = list(classical = response_cues %>% filter(condition == "classical"),
+                                  child = response_cues %>% filter(condition == "child")), ,
+                  cn = list(child = response_cues %>% filter(condition == "child"),
+                                  noise = response_cues %>% filter(condition == "noise")),
+                  cln = list(classical = response_cues %>% filter(condition == "classical"),
+                                  noise = response_cues %>% filter(condition == "noise"))
 )
 
 # Begin simulation ----
@@ -153,12 +148,9 @@ with_progress({
 save(null_repsim_cor, file = "data/null_repsim_corList_responses_mapped.Rdata")
 
 
-true_correlations <- list(ca_mover = cor_ca_mover,
-                          ca_stayer = cor_ca_stayer,
-                          cs_mover = cor_cs_mover,
-                          cs_stayer = cor_cs_stayer,
-                          as_mover = cor_as_mover,
-                          as_stayer = cor_as_stayer
+true_correlations <- list(ccl = cor_ccl,
+                          cn = cor_cn,
+                          cln = cor_cln,
                            )
 
 
