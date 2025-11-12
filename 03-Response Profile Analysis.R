@@ -16,11 +16,10 @@ source("R/simulate_null_cor.R")
 
 
 ## Response data ----
-#Data/Metadata_MM_2025-X-X
-load("data/responses_formatted_1032023.Rdata")
+#load response mapping
+response_map <- readRDS("response_map 1.rds")
+full_df <- read.csv("Metadata_MM_2025-11-12.csv")
 
-## Response mappings
-response_map <- read_xlsx("response_map_for revisions.xlsx", sheet = "response_map_uniq")
 
 
 ## List of movers and stayers ----
@@ -62,17 +61,18 @@ stats_func <- function(x,y){
 
 ## Structure response dataset and remove multi-word responses ----
 response_cues <- full_df %>%
-    select(participant, cue, response, condition, response_order) %>%
+  left_join(select(response_map, response, revision), by = c("response")) %>%
+  unique() %>%
+    select(participant, cue, response, revision, condition, response_order) %>%
     mutate(participant = as.factor(participant), 
            cue = as.factor(cue), 
            condition = factor(condition, 
-                              levels = 1:3, 
+                              levels = c("c", "cl", "n"), 
                               labels = c("child", "classical", "noise"))) %>%
     #slice(which(!str_count(.$response, "\\w+") >1)) %>%
     #left_join(., movers_and_stayers, by = c("cue" = "word")) %>%
-    left_join(., unique(select(response_map, response = RESPONSE, revision)) %>% filter(!is.na(revision))) %>%
     mutate(responses_revised = ifelse(is.na(revision), response, revision)) %>%
-    select(-response,-revision)
+  filter(!responses_revised == "")
 
 
 
@@ -117,7 +117,7 @@ plan("multisession")
 
 
 null_list <- list(ccl = list(classical = response_cues %>% filter(condition == "classical"),
-                                  child = response_cues %>% filter(condition == "child")), ,
+                                  child = response_cues %>% filter(condition == "child")),
                   cn = list(child = response_cues %>% filter(condition == "child"),
                                   noise = response_cues %>% filter(condition == "noise")),
                   cln = list(classical = response_cues %>% filter(condition == "classical"),
@@ -145,12 +145,12 @@ with_progress({
 
 
 
-save(null_repsim_cor, file = "data/null_repsim_corList_responses_mapped.Rdata")
+save(null_repsim_cor, file = "null_repsim_corList_responses_mapped.Rdata")
 
 
 true_correlations <- list(ccl = cor_ccl,
                           cn = cor_cn,
-                          cln = cor_cln,
+                          cln = cor_cln
                            )
 
 
@@ -181,4 +181,3 @@ p <- imap(l, ~{
         ggsave(paste("Figures_revised/",.y,".png",sep=""))
     }
   )
-
